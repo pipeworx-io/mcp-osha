@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-osha",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OSHA MCP — US workplace-safety standards (29 CFR Chapter XVII, parts 1900–1990).",
   "type": "module",
   "main": "src/index.ts",

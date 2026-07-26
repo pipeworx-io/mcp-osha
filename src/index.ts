@@ -329,42 +329,57 @@ async function oshaSearch(args: Record<string, unknown>): Promise<unknown> {
 
   const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 20);
 
-  // Over-fetch so that after dropping non-OSHA (wage/hour) hits we can still
-  // return up to `limit` OSHA results.
-  const params = new URLSearchParams({
-    query,
-    per_page: String(Math.min(limit * 3, 50)),
-    page: '1',
-    order: 'relevance',
-  });
-  params.append('hierarchy[title]', String(TITLE));
+  // eCFR search returns one row per matching PARAGRAPH, so a single dense
+  // section can fill an entire page. Dedupe by citation AND drop non-OSHA
+  // (Title-29 wage/hour) parts, walking up to 3 pages (20/page, the API max)
+  // until `limit` distinct OSHA sections are collected.
+  const seen = new Set<string>();
+  const results: Array<Record<string, unknown>> = [];
+  let total: unknown = null;
 
-  const data = await ecfrGet(`/search/v1/results?${params.toString()}`);
-  const meta = (data.meta as Record<string, unknown> | undefined) ?? {};
-  const rawResults = Array.isArray(data.results) ? (data.results as Array<Record<string, unknown>>) : [];
+  for (let page = 1; page <= 3 && results.length < limit; page++) {
+    const params = new URLSearchParams({
+      query,
+      per_page: '20',
+      page: String(page),
+      order: 'relevance',
+    });
+    params.append('hierarchy[title]', String(TITLE));
 
-  const results = rawResults
-    .map((r) => {
+    const data = await ecfrGet(`/search/v1/results?${params.toString()}`);
+    const meta = (data.meta as Record<string, unknown> | undefined) ?? {};
+    if (total == null) total = meta.total_count ?? null;
+    const rawResults = Array.isArray(data.results) ? (data.results as Array<Record<string, unknown>>) : [];
+    if (rawResults.length === 0) break;
+
+    for (const r of rawResults) {
+      if (results.length >= limit) break;
       const h = (r.hierarchy as Record<string, unknown> | undefined) ?? {};
       const headings = (r.headings as Record<string, unknown> | undefined) ?? {};
       const hHeadings = (r.hierarchy_headings as Record<string, unknown> | undefined) ?? {};
       const part = h.part != null ? String(h.part) : null;
       const section = h.section != null ? String(h.section) : null;
       const subpart = h.subpart != null ? String(h.subpart) : null;
+      // OSHA-only: keep parts 1900–1990, drop Title-29 wage/hour and unparseable.
+      if (!isOshaPart(part)) continue;
       const heading =
         (typeof headings.section === 'string' && stripHtml(headings.section)) ||
         (typeof hHeadings.section === 'string' && stripHtml(hHeadings.section)) ||
         null;
-      let citation: string | null = null;
-      let source_url: string | null = null;
+      let citation: string;
+      let source_url: string;
       if (section) {
         citation = `29 CFR ${section}`;
         source_url = `https://www.ecfr.gov/current/title-29/section-${section}`;
       } else if (part) {
         citation = `29 CFR Part ${part}`;
         source_url = `https://www.ecfr.gov/current/title-29/part-${part}`;
+      } else {
+        continue;
       }
-      return {
+      if (seen.has(citation)) continue;
+      seen.add(citation);
+      results.push({
         part,
         subpart,
         section,
@@ -372,15 +387,13 @@ async function oshaSearch(args: Record<string, unknown>): Promise<unknown> {
         heading,
         excerpt: stripHtml(r.full_text_excerpt ?? (r as Record<string, unknown>).excerpt).slice(0, 300),
         source_url,
-      };
-    })
-    // OSHA-only: keep parts 1900–1990, drop Title-29 wage/hour and unparseable.
-    .filter((r) => isOshaPart(r.part))
-    .slice(0, limit);
+      });
+    }
+  }
 
   return {
     query,
-    total_matches: meta.total_count ?? null,
+    total_matches: total,
     count: results.length,
     scope: 'OSHA standards — 29 CFR parts 1900–1990 (Chapter XVII)',
     source: 'eCFR / OSHA 29 CFR',
