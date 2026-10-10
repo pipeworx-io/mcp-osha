@@ -1,15 +1,62 @@
-# mcp-osha
+# @pipeworx/osha
 
-OSHA MCP — US workplace-safety standards (29 CFR Chapter XVII, parts 1900–1990).
+US OSHA workplace-safety standards (29 CFR) AND OSHA enforcement records —
+inspections, violations, and penalties by establishment.
 
-Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1679+ live data sources.
+Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1764+ live data sources. This is an independent, unofficial integration — not affiliated with, endorsed by, or published by the upstream provider.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `osha_standard` | Get the full text of one OSHA standard (US workplace-safety / occupational safety and health regulation) by its citation. OSHA standards are 29 CFR — this returns the exact regulatory wording currently in force. Answers "what is the OSHA standard for X", "does OSHA require X", "read the text of 1910.132", "the OSHA fall protection rule". Forgiving citation input: "1910.132", "29 CFR 1910.132", "§1910.132", "1926.501", even "1910.132(a)" (paragraph is stripped to the section). Covers 29 CFR 1910 general industry, 1926 construction, 1915/1917/1918 maritime, 1928 agriculture, plus recordkeeping (1904) and PPE / hazard communication / lockout tagout / respiratory protection / confined space / bloodborne pathogens standards. Pass a whole part (e.g. "1910" or "1926") to get that part's section list instead. Example: osha_standard({ citation: "1910.132" }) → PPE general requirements; osha_standard({ citation: "1926.501" }) → construction fall protection. Keyless. |
-| `osha_search` | Keyword search across OSHA standards — the US workplace-safety / occupational safety and health regulations in 29 CFR (parts 1900–1990). Answers "what OSHA standards cover X", "OSHA regulation / workplace safety requirement for X", "find the OSHA rule about X". Great for topics: fall protection, hazard communication (HazCom / GHS), lockout tagout (LOTO), respiratory protection, personal protective equipment (PPE), confined space, bloodborne pathogens, machine guarding, scaffolding, excavation, permissible exposure limits, recordkeeping. Returns matching OSHA standards with citation, heading, excerpt, and source URL. Results are filtered to OSHA parts only (1910 general industry, 1926 construction, 1915/1917/1918 maritime, 1928 agriculture, 1904 recordkeeping, etc.) — Title-29 wage/hour parts are excluded. Example: osha_search({ query: "fall protection" }); osha_search({ query: "lockout tagout", limit: 15 }). Keyless. |
+- `osha_standard(citation)` — full text of one OSHA standard by citation (e.g. "1910.132"), or a part's section list.
+- `osha_search(query, limit?)` — keyword search across OSHA standards (29 CFR parts 1900–1990).
+- `osha_inspections(establishment?, state?, since?, limit?)` — OSHA inspections for a named establishment and/or state, with dates, inspection type, scope, and open/closed status.
+- `osha_inspection(activity_nr)` — one inspection's violations: standard cited, violation type, instances, employees exposed, and initial + current penalty amounts, with totals.
+- `osha_establishment_summary(name, state?)` — rolled-up inspection count, violation count, total penalties, last inspection date, and the distinct establishment names matched.
+
+## Auth
+
+- `osha_standard` / `osha_search`: keyless (eCFR).
+- `osha_inspections` / `osha_inspection` / `osha_establishment_summary`: platform key
+  (`PLATFORM_DOL_KEY`) with BYO override via `_apiKey` — the same key and the
+  same DOL Open Data Portal account the `dol-whd` pack uses.
+
+## Data sources
+
+- <https://www.ecfr.gov/api> — eCFR, for the standards tools.
+- <https://apiprod.dol.gov/v4/get/osha/inspection/json> — OSHA Inspection (DOL dataset 10334).
+- <https://apiprod.dol.gov/v4/get/osha/violation/json> — OSHA Violation (DOL dataset 10338).
+
+Both enforcement tables are called live, per request — **no stored copy**.
+Measured 2026-10-09/10 against the live API:
+
+- The HTML establishment-search UI the original task named
+  (`osha.gov/pls|ords/imis/establishment.search`) sits behind an AWS WAF
+  "Human Verification" CAPTCHA on every request — `HTTP 405`,
+  `x-amzn-waf-action: captcha` — even from a plain curl with a full browser
+  User-Agent. That is a JS/CAPTCHA challenge, not a UA check, so no
+  server-side fetch (including a Cloudflare Worker) can pass it. It is not
+  used by this pack.
+- `enforcedata.dol.gov` 301-redirects to `data.dol.gov`, the same React SPA
+  host `dol-whd` already reverse-engineered. Its real API —
+  `apiprod.dol.gov/v4` — serves OSHA's inspection and violation tables
+  live and per-request, filterable by `filter_object`, not as a bulk-download
+  catalog. Frequency is "Daily"; a live violation row's `load_dt` was the day
+  before this was built. No baking, no KV/D1, no database — this reuses
+  `dol-whd`'s already-funded platform key.
+- Row access repeats two `dol-whd` findings: the `/v4/get/...` endpoint
+  REJECTS the key as an `X-API-KEY` HEADER (401) and requires it as a QUERY
+  PARAMETER instead; a zero-match query answers `HTTP 204` with an EMPTY
+  body, not `{"data":[]}`.
+- NEW, not documented anywhere DOL publishes: `like` matching on `estab_name`
+  is CASE-SENSITIVE and the column is stored UPPER-CASE — `%walmart%` 204s,
+  `%WALMART%` 200s for the identical establishment. Every name/establishment
+  argument is upper-cased before building the filter.
+- The ~20-call/10-minute 429 throttle `dol-whd` documented is shared by this
+  dataset (hit it live while building this pack). On 429, each enforcement
+  tool backs off twice, then returns `reason: 'upstream_rate_limited'`
+  rather than a bare throw or a silent `found:false`.
+- `data_as_of` on every enforcement response is the call's own timestamp —
+  there is no cache to report a load date for; the request IS the read.
 
 ## Quick Start
 
@@ -55,7 +102,7 @@ directly, instead of just this one's:
 }
 ```
 
-Both URLs reach the same gateway and the same 1679+ data sources. The
+Both URLs reach the same gateway and the same 1764+ data sources. The
 only difference is which pack's tools are listed **directly**; `ask_pipeworx`
 reaches all of them from either one.
 
