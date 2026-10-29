@@ -1,12 +1,20 @@
 {
   "name": "@pipeworx/mcp-osha",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "OSHA MCP — US workplace-safety standards (29 CFR Chapter XVII, parts 1900–1990) AND OSHA enforcement records (inspections / violations / penalties).",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./tools.json": "./tools.json",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "mcp-osha": "bin/cli.js"
+  },
+  "files": ["bin/", "lib/", "tools.json", "server.json"],
+  "engines": {
+    "node": ">=18"
   },
   "keywords": ["mcp", "mcp-server", "model-context-protocol", "pipeworx", "osha"],
   "license": "MIT",
@@ -14,19 +22,12 @@
     "type": "git",
     "url": "git+https://github.com/pipeworx-io/mcp-osha.git"
   },
-  "scripts": {
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "tsx": "^4.19.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.9.3",
-    "@cloudflare/workers-types": "^4.20260405.1"
-  },
+  "mcpName": "io.github.pipeworx-io/osha",
   "pipeworx": {
-    "sourceHash": "v1-1e9e288aad37d1b854d4e1a34adcb68996897473094c392a437dcb7dc92e21ae",
-    "sourceCommit": "f54ad77e789f27fe393978f9c080b5b18c87bb4f"
+    "mode": "gateway",
+    "slug": "osha",
+    "gatewaySlug": "osha",
+    "sourceHash": "v1-97a275f6b618bfe06267ca81269e9e3c6181b7f61b24f5669b6f33c526b52563",
+    "sourceCommit": "6bae4cfa7b6a73bbe014dc8820a19c80c842b21e"
   }
 }
